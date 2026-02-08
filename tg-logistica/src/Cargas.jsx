@@ -139,17 +139,10 @@ function enumerateDays(start, end) {
 function isValidDateObj(d) {
   return d instanceof Date && !Number.isNaN(d.getTime());
 }
-function formatBRDateTime(dateObj) {
-  if (!isValidDateObj(dateObj)) return "";
-  return `${pad2(dateObj.getDate())}/${pad2(dateObj.getMonth() + 1)}/${dateObj.getFullYear()} ${pad2(
-    dateObj.getHours()
-  )}:${pad2(dateObj.getMinutes())}`;
-}
 function parseBRDateTime(str) {
   const s = (str || "").trim();
   if (!s) return null;
 
-  // aceita: dd/mm/aaaa hh:mm  (hora opcional -> assume 00:00)
   const parts = s.split(" ");
   const dpart = parts[0] || "";
   const tpart = parts[1] || "00:00";
@@ -163,20 +156,15 @@ function parseBRDateTime(str) {
 
   const d = new Date(yyyy, mm - 1, dd, H, M, 0, 0);
   if (!isValidDateObj(d)) return null;
-
-  // valida contra datas “impossíveis” (ex: 31/02)
   if (d.getFullYear() !== yyyy || d.getMonth() !== mm - 1 || d.getDate() !== dd) return null;
-
   return d;
 }
 function brDateToISODate(brDate) {
-  // br: dd/mm/aaaa -> yyyy-mm-dd
   const [dd, mm, yyyy] = (brDate || "").split("/").map((x) => (x || "").trim());
   if (!dd || !mm || !yyyy) return "";
   return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
 }
 function isoDateToBR(iso) {
-  // iso: yyyy-mm-dd -> dd/mm/aaaa
   const [yyyy, mm, dd] = (iso || "").split("-");
   if (!yyyy || !mm || !dd) return "";
   return `${dd.padStart(2, "0")}/${mm.padStart(2, "0")}/${yyyy}`;
@@ -184,6 +172,42 @@ function isoDateToBR(iso) {
 function isVazioOrManut(status) {
   const s = (status || "").toUpperCase();
   return s === "VAZIO" || s === "MANUTENÇÃO" || s === "MANUTENCAO";
+}
+function fmtHHMMFromBRDateTime(brdt) {
+  const d = parseBRDateTime(brdt);
+  if (!d) return "";
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+/* =========================
+   ✅ Cidade/UF parser (para filtros do relatório)
+   Entrada típica: "CAJAMAR - SP" ou "CAJAMAR/SP"
+========================= */
+function parseCidadeUF(s) {
+  const txt = (s || "").toString().trim();
+  if (!txt) return { cidade: "", uf: "" };
+
+  // tenta "CIDADE - UF"
+  if (txt.includes("-")) {
+    const parts = txt.split("-").map((x) => x.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      const uf = (parts[parts.length - 1] || "").toUpperCase().slice(0, 2);
+      const cidade = parts.slice(0, parts.length - 1).join(" - ").trim();
+      return { cidade, uf };
+    }
+  }
+
+  // tenta "CIDADE/UF"
+  if (txt.includes("/")) {
+    const parts = txt.split("/").map((x) => x.trim()).filter(Boolean);
+    if (parts.length >= 2) {
+      const uf = (parts[parts.length - 1] || "").toUpperCase().slice(0, 2);
+      const cidade = parts.slice(0, parts.length - 1).join(" / ").trim();
+      return { cidade, uf };
+    }
+  }
+
+  return { cidade: txt, uf: "" };
 }
 
 /* =========================
@@ -222,7 +246,7 @@ function cargaStatusBadgeStyle(status) {
 }
 
 /* =========================
-   ✅ emptyCarga (inclui datas opcionais)
+   ✅ emptyCarga
 ========================= */
 const emptyCarga = {
   cidadeOrigem: "",
@@ -230,8 +254,6 @@ const emptyCarga = {
   cidadeDestino: "",
   clienteEntrega: "",
   status: "AGUARDANDO DESCARGA",
-
-  // texto "dd/mm/aaaa hh:mm"
   dataColeta: "",
   dataEntrega: "",
 };
@@ -297,15 +319,12 @@ const KPIBadge = ({ code, meta, value, active, onClick }) => (
 
 /* =========================
    ✅ Date+Time Picker (calendário + relógio)
-   - Usa <input type="date"> e <input type="time">
-   - Salva no formato: dd/mm/aaaa hh:mm
 ========================= */
 function DateTimeBRPicker({ name, value, onChange, placeholder }) {
   const parsed = useMemo(() => parseBRDateTime(value), [value]);
 
   const isoDate = useMemo(() => {
     if (!parsed) {
-      // tenta inferir somente data (dd/mm/aaaa)
       const onlyDate = (value || "").trim().split(" ")[0] || "";
       return brDateToISODate(onlyDate);
     }
@@ -391,11 +410,7 @@ const header = {
   padding: "20px 24px",
   borderBottom: `4px solid ${TG.blue}`,
 };
-const headerLeft = {
-  display: "flex",
-  alignItems: "center",
-  gap: 16,
-};
+const headerLeft = { display: "flex", alignItems: "center", gap: 16 };
 const kpiPanel = {
   background: TG.white,
   border: `1px solid ${TG.border}`,
@@ -449,12 +464,7 @@ const toolbar = {
   gap: 12,
   flexWrap: "wrap",
 };
-const toolbarSticky = {
-  ...toolbar,
-  position: "sticky",
-  top: 10,
-  zIndex: 20,
-};
+const toolbarSticky = { ...toolbar, position: "sticky", top: 10, zIndex: 20 };
 const btnSmall = {
   border: `1px solid ${TG.border}`,
   background: TG.white,
@@ -470,6 +480,12 @@ const btnSmall = {
   gap: 8,
   whiteSpace: "nowrap",
 };
+const btnSmallBlue = {
+  ...btnSmall,
+  background: TG.blue,
+  borderColor: TG.blue,
+  color: TG.white,
+};
 const sheetWrap = {
   background: TG.white,
   border: `1px solid ${TG.border}`,
@@ -478,11 +494,7 @@ const sheetWrap = {
   maxHeight: "74vh",
   boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
 };
-const sheetTable = {
-  width: "max-content",
-  borderCollapse: "collapse",
-  fontSize: 13,
-};
+const sheetTable = { width: "max-content", borderCollapse: "collapse", fontSize: 13 };
 const thStickyLeft = {
   position: "sticky",
   left: 0,
@@ -507,7 +519,6 @@ const thDay = {
   minWidth: 180,
   fontWeight: 600,
 };
-
 const tdStickyLeft = {
   position: "sticky",
   left: 0,
@@ -527,12 +538,7 @@ const tdDay = {
   minWidth: 180,
   height: 200,
 };
-const tdEmpty = {
-  padding: 24,
-  textAlign: "center",
-  color: TG.muted,
-  fontSize: 14,
-};
+const tdEmpty = { padding: 24, textAlign: "center", color: TG.muted, fontSize: 14 };
 const btnGhost = {
   border: `1px solid ${TG.border}`,
   background: TG.white,
@@ -672,14 +678,7 @@ const rangeBar = {
   flexWrap: "wrap",
   alignItems: "center",
 };
-const rangeLabel = {
-  display: "flex",
-  gap: 8,
-  alignItems: "center",
-  fontSize: 13,
-  fontWeight: 600,
-  color: TG.black,
-};
+const rangeLabel = { display: "flex", gap: 8, alignItems: "center", fontSize: 13, fontWeight: 600, color: TG.black };
 
 /* =========================
    🔥 VÍNCULO VEÍCULO/CARRETA (placas)
@@ -687,15 +686,13 @@ const rangeLabel = {
 function pickMotoristaIdFromDoc(docObj) {
   return docObj?.motoristaId ?? docObj?.motorista_id ?? docObj?.driverId ?? docObj?.driver_id ?? "";
 }
-
 function fmtVeiculo(v) {
   if (!v) return "(sem veículo)";
   const placa = v.placa || "-";
-  const tipo = v.tipo || "-";
+  const tipo = (v.tipo || "-").toString();
   const st = v.statusManutencao || "-";
   return `${placa} • ${tipo} • ${st}`;
 }
-
 function fmtCarreta(c) {
   if (!c) return "(sem carreta)";
   const placa = c.placaCarreta || c.placa || "-";
@@ -704,6 +701,19 @@ function fmtCarreta(c) {
   const st = c.statusManutencao || "-";
   const mid = [placa, tipo, eixos].filter(Boolean).join(" • ");
   return `${mid} • ${st}`;
+}
+function normVeiculoTipo(t) {
+  const s = (t || "").toString().toUpperCase();
+  if (s.includes("TOCO")) return "TOCO";
+  if (s.includes("TRUC")) return "TRUCADO";
+  if (s.includes("TRUCK")) return "TRUCK";
+  return s ? s : "-";
+}
+function normCarretaTipo(t) {
+  const s = (t || "").toString().toUpperCase();
+  if (s.includes("SIDER")) return "SIDER";
+  if (s.includes("BAU") || s.includes("BAÚ")) return "BAÚ";
+  return s ? s : "-";
 }
 
 /* =========================
@@ -718,17 +728,15 @@ function getCellBackground(motoristaId, dateObj, statusIndex, cargasIndex) {
   const hasStatus = !!(st && st.codigo);
   const hasCarga = cargas.length > 0;
 
-  // prioridade por códigos
-  if (st?.codigo === "F") return "#fee2e2"; // falta
-  if (st?.codigo === "D") return "#e5e7eb"; // demitido
-  if (st?.codigo === "FE") return "#fce7f3"; // férias
-  if (st?.codigo === "DS") return "#f3e8ff"; // descanso
-  if (st?.codigo === "A") return "#fef9c3"; // atestado
+  if (st?.codigo === "F") return "#fee2e2";
+  if (st?.codigo === "D") return "#e5e7eb";
+  if (st?.codigo === "FE") return "#fce7f3";
+  if (st?.codigo === "DS") return "#f3e8ff";
+  if (st?.codigo === "A") return "#fef9c3";
 
-  // combinações
-  if (hasStatus && hasCarga) return "#dcfce7"; // verde claro
-  if (hasCarga) return "#fef3c7"; // amarelo claro
-  if (hasStatus) return "#e0f2fe"; // azul claro
+  if (hasStatus && hasCarga) return "#dcfce7";
+  if (hasCarga) return "#fef3c7";
+  if (hasStatus) return "#e0f2fe";
 
   return null;
 }
@@ -754,6 +762,11 @@ export default function Cargas() {
   const [statusModalOpen, setStatusModalOpen] = useState(false);
   const [cargaModalOpen, setCargaModalOpen] = useState(false);
 
+  // ✅ modal relatório
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportUF, setReportUF] = useState("ALL");
+  const [reportCity, setReportCity] = useState("ALL");
+
   const [modalMotorista, setModalMotorista] = useState(null);
   const [modalDate, setModalDate] = useState(null);
 
@@ -768,7 +781,11 @@ export default function Cargas() {
   const [statusObs, setStatusObs] = useState("");
 
   const [searchNome, setSearchNome] = useState("");
+
+  // ✅ filtros por coluna (dia): preenchimento + status da carga
   const [dayFilters, setDayFilters] = useState({});
+  // dayFilters[dk] = { fill: "all"|"filled"|"empty", cargaStatus: "any"|<STATUS> }
+
   const [compact, setCompact] = useState(false);
   const [openVinculos, setOpenVinculos] = useState({});
 
@@ -872,6 +889,12 @@ export default function Cargas() {
     }
     return map;
   }, [carretas]);
+
+  const motoristaPorId = useMemo(() => {
+    const m = new Map();
+    for (const x of motoristas || []) m.set(x.id, x);
+    return m;
+  }, [motoristas]);
 
   const days = useMemo(() => buildMonthDays(viewDate.getFullYear(), viewDate.getMonth()), [viewDate]);
 
@@ -1144,14 +1167,12 @@ export default function Cargas() {
   function onCargaChange(e) {
     const { name, value } = e.target;
 
-    // ✅ ao mudar status para VAZIO/MANUTENÇÃO: mantém só "origem" (cidade atual) + datas
     if (name === "status") {
       const next = value;
       if (isVazioOrManut(next)) {
         setFormCarga((p) => ({
           ...p,
           status: next,
-          // mantém origem + datas
           cidadeDestino: "",
           clienteColeta: "",
           clienteEntrega: "",
@@ -1165,7 +1186,6 @@ export default function Cargas() {
 
   // ✅ resolve: salva dia ou período baseado em rangeFrom/rangeTo
   function resolveDiasParaSalvar() {
-    // se não preencher (ou preencher só 1), salva somente o dia do modal
     const d1 = inputToDate(rangeFrom);
     const d2 = inputToDate(rangeTo);
 
@@ -1231,7 +1251,6 @@ export default function Cargas() {
     await addDoc(colStatus, { ...payload, createdAt: serverTimestamp() });
   }
 
-  // ✅ ÚNICO BOTÃO: SALVAR STATUS (dia ou período)
   async function salvarStatusMotorista() {
     if (!modalMotorista || !modalDate) return;
 
@@ -1288,7 +1307,6 @@ export default function Cargas() {
 
     if (!payload.status) throw new Error("Sem status de carga.");
 
-    // ✅ se for VAZIO/MANUTENÇÃO: garante “somente origem”
     if (isVazioOrManut(payload.status)) {
       payload.clienteColeta = "";
       payload.cidadeDestino = "";
@@ -1322,9 +1340,6 @@ export default function Cargas() {
     return out;
   }
 
-  // ✅ ÚNICO BOTÃO: SALVAR CARGA (dia ou período)
-  // + se preencher dataColeta/dataEntrega: salva também nos dias dessas datas
-  //   - dia da entrega salva com status "AGUARDANDO DESCARGA"
   async function salvarCarga() {
     if (!modalMotorista || !modalDate) return;
 
@@ -1333,7 +1348,6 @@ export default function Cargas() {
       return;
     }
 
-    // valida formato se o usuário digitou algo manualmente
     if (formCarga.dataColeta && !parseBRDateTime(formCarga.dataColeta)) {
       alert('Data/Hora Coleta inválida. Use "dd/mm/aaaa hh:mm" (ex: 09/02/2026 11:00).');
       return;
@@ -1357,10 +1371,8 @@ export default function Cargas() {
     try {
       const m = { id: modalMotorista.id, nome: modalMotorista.nome };
 
-      // 1) salva no dia/período escolhido (como já era)
       for (const dd of ds) await upsertCargaForDay(m, dd, formCarga);
 
-      // 2) ✅ auto-insere no dia da coleta e no dia da entrega (se preenchidos)
       const { coleta, entrega } = getAutoDaysFromColetaEntrega(formCarga);
 
       if (coleta) {
@@ -1487,9 +1499,26 @@ export default function Cargas() {
     );
   }
 
+  // ✅ filtros por coluna
+  function setDayFilter(dateObj, patch) {
+    const dk = dayKey(dateObj);
+    setDayFilters((prev) => {
+      const cur = prev?.[dk] || { fill: "all", cargaStatus: "any" };
+      return { ...(prev || {}), [dk]: { ...cur, ...patch } };
+    });
+  }
+  function clearDayFilters() {
+    setDayFilters({});
+  }
+
   const visibleMotoristas = useMemo(() => {
     const term = (searchNome || "").trim().toLowerCase();
-    const activeDayFilters = Object.entries(dayFilters || {}).filter(([, v]) => v && v !== "all");
+    const activeDayFilters = Object.entries(dayFilters || {}).filter(([, v]) => {
+      if (!v) return false;
+      const fill = v.fill || "all";
+      const cargaStatus = v.cargaStatus || "any";
+      return fill !== "all" || cargaStatus !== "any";
+    });
 
     return (motoristas || []).filter((m) => {
       if (term) {
@@ -1497,26 +1526,31 @@ export default function Cargas() {
         if (!nome.includes(term)) return false;
       }
 
-      for (const [dk, mode] of activeDayFilters) {
+      for (const [dk, rule] of activeDayFilters) {
         const dateObj = inputToDate(dk);
         if (!dateObj) continue;
 
-        const has = cellHasContent(m.id, dateObj);
-        if (mode === "filled" && !has) return false;
-        if (mode === "empty" && has) return false;
+        const fill = rule?.fill || "all";
+        const cargaStatus = rule?.cargaStatus || "any";
+
+        const key = `${m.id}|${dayKey(dateObj)}`;
+        const cargasDoDia = cargasIndex.get(key) || [];
+        const hasContent = cellHasContent(m.id, dateObj);
+
+        if (fill === "filled" && !hasContent) return false;
+        if (fill === "empty" && hasContent) return false;
+
+        if (cargaStatus !== "any") {
+          const found = (cargasDoDia || []).some(
+            (c) => ((c?.status || "").toUpperCase() === (cargaStatus || "").toUpperCase())
+          );
+          if (!found) return false;
+        }
       }
 
       return true;
     });
   }, [motoristas, searchNome, dayFilters, statusIndex, cargasIndex, viewDate]);
-
-  function setDayFilter(dateObj, mode) {
-    const dk = dayKey(dateObj);
-    setDayFilters((p) => ({ ...(p || {}), [dk]: mode }));
-  }
-  function clearDayFilters() {
-    setDayFilters({});
-  }
 
   const tdDayFinal = useMemo(() => {
     if (!compact) return tdDay;
@@ -1539,6 +1573,385 @@ export default function Cargas() {
 
   const onlyOrigemMode = useMemo(() => isVazioOrManut(formCarga.status), [formCarga.status]);
 
+  /* =========================
+     ✅ RELATÓRIO DO DIA
+  ========================= */
+  function openReport() {
+    setReportUF("ALL");
+    setReportCity("ALL");
+    setReportOpen(true);
+  }
+
+  const reportDateObj = useMemo(() => inputToDate(filterDay), [filterDay]);
+  const reportDayKey = useMemo(() => (reportDateObj ? dayKey(reportDateObj) : ""), [reportDateObj]);
+
+  const reportEntriesAll = useMemo(() => {
+    if (!reportDateObj) return [];
+
+    const entries = [];
+    for (const c of cargas || []) {
+      const dref = toDateSafe(c.dataRef);
+      if (!dref) continue;
+      if (dayKey(dref) !== reportDayKey) continue;
+
+      const mid = c.motoristaId || "";
+      const mot = motoristaPorId.get(mid) || { id: mid, nome: c.motoristaNome || "(sem nome)" };
+
+      const v = veiculoPorMotorista.get(mid) || null;
+      const ca = carretaPorMotorista.get(mid) || null;
+
+      const vinc = getVinculo(mot);
+      const motDe = getMotoristaDe(mot);
+      const mopp = getTemMopp(mot) ? "Sim" : "Não";
+
+      const veicPlaca = v?.placa || "-";
+      const veicTipo = normVeiculoTipo(v?.tipo);
+      const carrTipo = normCarretaTipo(ca?.tipoCarreta || ca?.tipo);
+      const carrPlaca = (ca?.placaCarreta || ca?.placa) ? (ca?.placaCarreta || ca?.placa) : "-";
+
+      const st = (c.status || "").toUpperCase();
+
+      const destinoParsed = parseCidadeUF(c.cidadeDestino);
+      const origemParsed = parseCidadeUF(c.cidadeOrigem);
+
+      // p/ filtros, quando for VAZIO/MANUTENÇÃO usamos "cidadeOrigem" como cidade atual
+      const baseUF = isVazioOrManut(st) ? (origemParsed.uf || "") : (destinoParsed.uf || "");
+      const baseCidade = isVazioOrManut(st) ? (origemParsed.cidade || c.cidadeOrigem || "") : (destinoParsed.cidade || c.cidadeDestino || "");
+
+      // "hora da descarga": prioridade dataEntrega, senão dataColeta
+      const horaDescarga = st === "AGUARDANDO DESCARGA"
+        ? (fmtHHMMFromBRDateTime(c.dataEntrega) || fmtHHMMFromBRDateTime(c.dataColeta) || "")
+        : (fmtHHMMFromBRDateTime(c.dataColeta) || fmtHHMMFromBRDateTime(c.dataEntrega) || "");
+
+      entries.push({
+        id: c.id,
+        status: st || "-",
+        motorista: mot?.nome || "-",
+        frota: vinc || motDe || "-",
+        mopp,
+        veiculoPlaca: veicPlaca,
+        veiculoTipo: veicTipo,
+        carretaTipo: carrTipo,
+        carretaPlaca: carrPlaca,
+
+        clienteDestino: (c.clienteEntrega || "").trim() || "-",
+        destino: (c.cidadeDestino || "").trim() || "-",
+        clienteColeta: (c.clienteColeta || "").trim() || "-",
+        origem: (c.cidadeOrigem || "").trim() || "-",
+
+        uf: (baseUF || "").toUpperCase(),
+        cidade: (baseCidade || "").toUpperCase(),
+        hora: horaDescarga,
+      });
+    }
+
+    // ordena por hora (quem tem hora primeiro), depois nome
+    entries.sort((a, b) => {
+      const ah = a.hora || "99:99";
+      const bh = b.hora || "99:99";
+      if (ah !== bh) return ah.localeCompare(bh);
+      return (a.motorista || "").localeCompare(b.motorista || "");
+    });
+
+    return entries;
+  }, [
+    reportDateObj,
+    reportDayKey,
+    cargas,
+    motoristaPorId,
+    veiculoPorMotorista,
+    carretaPorMotorista,
+  ]);
+
+  const reportUFOptions = useMemo(() => {
+    const set = new Set();
+    for (const e of reportEntriesAll) if (e.uf) set.add(e.uf);
+    return Array.from(set).sort();
+  }, [reportEntriesAll]);
+
+  const reportCityOptions = useMemo(() => {
+    const set = new Set();
+    for (const e of reportEntriesAll) {
+      if (reportUF !== "ALL" && (e.uf || "") !== reportUF) continue;
+      if (e.cidade) set.add(e.cidade);
+    }
+    return Array.from(set).sort();
+  }, [reportEntriesAll, reportUF]);
+
+  useEffect(() => {
+    // se trocar UF, reseta cidade se não existir
+    if (reportCity === "ALL") return;
+    if (!reportCityOptions.includes(reportCity)) setReportCity("ALL");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reportUF]);
+
+  const reportEntries = useMemo(() => {
+    return reportEntriesAll.filter((e) => {
+      if (reportUF !== "ALL" && (e.uf || "") !== reportUF) return false;
+      if (reportCity !== "ALL" && (e.cidade || "") !== reportCity) return false;
+      return true;
+    });
+  }, [reportEntriesAll, reportUF, reportCity]);
+
+  function groupByStatus(list) {
+    const map = new Map();
+    for (const x of list) {
+      const k = (x.status || "-").toUpperCase();
+      if (!map.has(k)) map.set(k, []);
+      map.get(k).push(x);
+    }
+    return map;
+  }
+
+  const reportGroups = useMemo(() => groupByStatus(reportEntries), [reportEntries]);
+
+  function summarizeUFcity(list) {
+    const by = new Map();
+    for (const x of list) {
+      const k = `${x.uf || "-"}|${x.cidade || "-"}`;
+      by.set(k, (by.get(k) || 0) + 1);
+    }
+    const arr = Array.from(by.entries()).map(([k, v]) => {
+      const [uf, cidade] = k.split("|");
+      return { uf, cidade, qtd: v };
+    });
+    arr.sort((a, b) => b.qtd - a.qtd || a.uf.localeCompare(b.uf) || a.cidade.localeCompare(b.cidade));
+    return arr;
+  }
+
+  function summarizeVeiculoTipo(list) {
+    const out = { TOCO: 0, TRUCADO: 0, TRUCK: 0, OUTROS: 0 };
+    for (const x of list) {
+      const t = (x.veiculoTipo || "").toUpperCase();
+      if (t === "TOCO") out.TOCO++;
+      else if (t === "TRUCADO") out.TRUCADO++;
+      else if (t === "TRUCK") out.TRUCK++;
+      else out.OUTROS++;
+    }
+    return out;
+  }
+
+  function getSectionTitle(st) {
+    const s = (st || "").toUpperCase();
+    if (s === "AGUARDANDO DESCARGA") return "Veículos aguardando descarga";
+    if (s === "AGUARDANDO CARREGAMENTO") return "Veículos aguardando carregamento";
+    if (s === "EM ROTA PARA A ENTREGA") return "Veículos em rota para entrega";
+    if (s === "EM ROTA PARA A COLETA") return "Veículos em rota para coleta";
+    if (s === "VAZIO") return "Veículos vazios (cidade atual)";
+    if (s.includes("MANUT")) return "Veículos em manutenção (cidade atual)";
+    return `Status: ${st}`;
+  }
+
+  function renderReportTable(list, statusKey) {
+    const LIMIT = 14; // pra caber bem em 1 página
+    const shown = list.slice(0, LIMIT);
+    const hidden = Math.max(0, list.length - LIMIT);
+
+    return (
+      <div style={{ border: `1px solid ${TG.border}`, borderRadius: 12, overflow: "hidden", background: TG.white }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+          <thead>
+            <tr style={{ background: "#f3f4f6" }}>
+              <th style={{ padding: 8, textAlign: "left", borderBottom: `1px solid ${TG.border}` }}>Motorista</th>
+              <th style={{ padding: 8, textAlign: "left", borderBottom: `1px solid ${TG.border}` }}>Frota</th>
+              <th style={{ padding: 8, textAlign: "center", borderBottom: `1px solid ${TG.border}` }}>MOPP</th>
+              <th style={{ padding: 8, textAlign: "left", borderBottom: `1px solid ${TG.border}` }}>Veículo</th>
+              <th style={{ padding: 8, textAlign: "left", borderBottom: `1px solid ${TG.border}` }}>Tipo</th>
+              <th style={{ padding: 8, textAlign: "left", borderBottom: `1px solid ${TG.border}` }}>Carreta</th>
+              <th style={{ padding: 8, textAlign: "left", borderBottom: `1px solid ${TG.border}` }}>Tipo</th>
+              <th style={{ padding: 8, textAlign: "left", borderBottom: `1px solid ${TG.border}` }}>
+                {statusKey === "VAZIO" || statusKey.includes("MANUT") ? "Cidade" : "Destino / Cliente"}
+              </th>
+              <th style={{ padding: 8, textAlign: "center", borderBottom: `1px solid ${TG.border}`, width: 70 }}>
+                Hora
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((r, i) => (
+              <tr key={r.id || i} style={{ background: i % 2 === 0 ? TG.white : "#fafafa" }}>
+                <td style={{ padding: 8, borderBottom: `1px solid ${TG.border}` }}>
+                  <div style={{ fontWeight: 800 }}>{r.motorista}</div>
+                </td>
+                <td style={{ padding: 8, borderBottom: `1px solid ${TG.border}` }}>{r.frota}</td>
+                <td style={{ padding: 8, borderBottom: `1px solid ${TG.border}`, textAlign: "center" }}>
+                  <span
+                    style={{
+                      display: "inline-block",
+                      padding: "2px 8px",
+                      borderRadius: 999,
+                      fontWeight: 900,
+                      border: `1px solid ${TG.border}`,
+                      background: r.mopp === "Sim" ? "#dcfce7" : "#fee2e2",
+                      color: r.mopp === "Sim" ? "#065f46" : "#991b1b",
+                    }}
+                  >
+                    {r.mopp}
+                  </span>
+                </td>
+                <td style={{ padding: 8, borderBottom: `1px solid ${TG.border}` }}>{r.veiculoPlaca}</td>
+                <td style={{ padding: 8, borderBottom: `1px solid ${TG.border}` }}>{r.veiculoTipo}</td>
+                <td style={{ padding: 8, borderBottom: `1px solid ${TG.border}` }}>{r.carretaPlaca}</td>
+                <td style={{ padding: 8, borderBottom: `1px solid ${TG.border}` }}>{r.carretaTipo}</td>
+                <td style={{ padding: 8, borderBottom: `1px solid ${TG.border}` }}>
+                  {statusKey === "VAZIO" || statusKey.includes("MANUT") ? (
+                    <div><b>{r.uf || "-"}</b> • {r.origem}</div>
+                  ) : (
+                    <div>
+                      <div style={{ fontWeight: 800 }}>{r.clienteDestino}</div>
+                      <div style={{ color: TG.muted }}>{r.destino}</div>
+                    </div>
+                  )}
+                </td>
+                <td style={{ padding: 8, borderBottom: `1px solid ${TG.border}`, textAlign: "center", fontWeight: 900 }}>
+                  {r.hora || "-"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {hidden > 0 ? (
+          <div style={{ padding: 10, fontSize: 11, fontWeight: 800, color: TG.muted, background: "#fff7ed" }}>
+            +{hidden} linha(s) não exibida(s) para caber em uma página. (Se precisar, filtre por UF/Cidade e gere novamente.)
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  function printReportNow() {
+    const title = `Relatório do dia - ${dayKPIs.dayLabel || ""}`;
+    const w = window.open("", "_blank", "noopener,noreferrer,width=1100,height=800");
+    if (!w) {
+      alert("Não consegui abrir a janela de impressão. Verifique se o bloqueador de pop-up está ativado.");
+      return;
+    }
+
+    const safe = (s) =>
+      (s || "")
+        .toString()
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+
+    const groupsInOrder = [
+      "AGUARDANDO DESCARGA",
+      "AGUARDANDO CARREGAMENTO",
+      "EM ROTA PARA A ENTREGA",
+      "EM ROTA PARA A COLETA",
+      "VAZIO",
+      "MANUTENÇÃO",
+    ];
+
+    const htmlSections = groupsInOrder
+      .filter((k) => (reportGroups.get(k) || []).length > 0)
+      .map((k) => {
+        const list = reportGroups.get(k) || [];
+        const vt = summarizeVeiculoTipo(list);
+
+        const header = `
+          <div class="sec">
+            <div class="secTitle">${safe(getSectionTitle(k))} <span class="count">(${list.length})</span></div>
+            <div class="chips">
+              <span class="chip">TOCO: <b>${vt.TOCO}</b></span>
+              <span class="chip">TRUCADO: <b>${vt.TRUCADO}</b></span>
+              <span class="chip">TRUCK: <b>${vt.TRUCK}</b></span>
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Motorista</th>
+                  <th>Frota</th>
+                  <th>MOPP</th>
+                  <th>Veículo</th>
+                  <th>Tipo</th>
+                  <th>Carreta</th>
+                  <th>Tipo</th>
+                  <th>${k === "VAZIO" || k.includes("MANUT") ? "Cidade" : "Destino / Cliente"}</th>
+                  <th>Hora</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${list.slice(0, 14).map((r) => `
+                  <tr>
+                    <td><b>${safe(r.motorista)}</b></td>
+                    <td>${safe(r.frota)}</td>
+                    <td>${safe(r.mopp)}</td>
+                    <td>${safe(r.veiculoPlaca)}</td>
+                    <td>${safe(r.veiculoTipo)}</td>
+                    <td>${safe(r.carretaPlaca)}</td>
+                    <td>${safe(r.carretaTipo)}</td>
+                    <td>${k === "VAZIO" || k.includes("MANUT") ? `<b>${safe(r.uf || "-")}</b> • ${safe(r.origem)}` : `<b>${safe(r.clienteDestino)}</b><br/><span class="muted">${safe(r.destino)}</span>`}</td>
+                    <td class="center"><b>${safe(r.hora || "-")}</b></td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+        `;
+        return header;
+      })
+      .join("");
+
+    const ufCity = summarizeUFcity(reportEntries).slice(0, 10);
+    const ufCityHtml = ufCity
+      .map((x) => `<span class="chip"><b>${safe(x.uf || "-")}</b> • ${safe(x.cidade || "-")}: <b>${x.qtd}</b></span>`)
+      .join("");
+
+    w.document.open();
+    w.document.write(`
+      <!doctype html>
+      <html>
+      <head>
+        <meta charset="utf-8"/>
+        <title>${safe(title)}</title>
+        <style>
+          @page { size: A4 landscape; margin: 10mm; }
+          body { font-family: Arial, sans-serif; color: #111827; }
+          .top { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+          .brand { font-weight:900; font-size:18px; }
+          .meta { color:#6b7280; font-weight:700; font-size:12px; }
+          .chips { display:flex; flex-wrap:wrap; gap:6px; margin:6px 0 10px; }
+          .chip { border:1px solid #d1d5db; border-radius:999px; padding:4px 8px; font-size:11px; background:#f8fafc; }
+          .sec { margin-top:10px; border:1px solid #d1d5db; border-radius:12px; padding:10px; }
+          .secTitle { font-weight:900; font-size:12px; }
+          .count { color:#0066cc; font-weight:900; }
+          table { width:100%; border-collapse:collapse; font-size:10.5px; margin-top:8px; }
+          th, td { border:1px solid #e5e7eb; padding:6px; vertical-align:top; }
+          th { background:#f3f4f6; text-align:left; }
+          .muted { color:#6b7280; }
+          .center { text-align:center; }
+        </style>
+      </head>
+      <body>
+        <div class="top">
+          <div>
+            <div class="brand">TG Logística • Relatório do dia</div>
+            <div class="meta">${safe(dayKPIs.dayLabel)} ${reportUF !== "ALL" ? `• UF: ${safe(reportUF)}` : ""} ${reportCity !== "ALL" ? `• Cidade: ${safe(reportCity)}` : ""}</div>
+          </div>
+          <div class="meta">Gerado pelo Descargo</div>
+        </div>
+
+        <div class="chips">
+          ${ufCityHtml}
+        </div>
+
+        ${htmlSections}
+
+        <script>
+          window.onload = () => { window.print(); };
+        </script>
+      </body>
+      </html>
+    `);
+    w.document.close();
+  }
+
+  /* =========================
+     UI
+  ========================= */
   return (
     <div style={{ background: TG.bg, minHeight: "100vh" }}>
       {/* HEADER */}
@@ -1557,7 +1970,7 @@ export default function Cargas() {
         {/* PAINEL DO DIA */}
         <div style={kpiPanel}>
           <div style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
-            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <div style={{ fontWeight: 700, color: TG.black }}>Resumo do dia:</div>
               <input
                 type="date"
@@ -1565,6 +1978,17 @@ export default function Cargas() {
                 onChange={(e) => setFilterDay(e.target.value)}
                 style={{ ...input, width: 180 }}
               />
+
+              {/* ✅ NOVO BOTÃO */}
+              <button
+                type="button"
+                onClick={openReport}
+                style={{ ...btnSmallBlue }}
+                title="Gera um relatório do dia selecionado (para print/printscreen)"
+              >
+                🧾 Gerar relatório
+              </button>
+
               <div style={{ fontSize: 12, fontWeight: 600, color: TG.muted }}>
                 {dayKPIs.dayLabel}
               </div>
@@ -1635,7 +2059,7 @@ export default function Cargas() {
                 Limpar filtros de colunas
               </button>
               <div style={{ fontSize: 12, color: TG.muted, fontWeight: 600 }}>
-                Dica: no topo de cada dia, escolha <b>Vazios</b> ou <b>Preenchidos</b>.
+                Dica: no topo de cada dia, filtre por <b>preenchimento</b> e/ou por <b>status da carga</b>.
               </div>
             </div>
           </div>
@@ -1655,8 +2079,11 @@ export default function Cargas() {
 
                 {days.map((d) => {
                   const dk = dayKey(d);
-                  const mode = dayFilters?.[dk] || "all";
                   const todayCol = isTodayColumn(d);
+
+                  const rule = dayFilters?.[dk] || { fill: "all", cargaStatus: "any" };
+                  const fillMode = rule.fill || "all";
+                  const cargaStatus = rule.cargaStatus || "any";
 
                   return (
                     <th
@@ -1676,10 +2103,10 @@ export default function Cargas() {
                       <div style={{ fontWeight: 700, fontSize: 14 }}>{pad2(d.getDate())}</div>
                       <div style={{ fontSize: 11, opacity: 0.9 }}>{weekdayShort(d)}</div>
 
-                      <div style={{ marginTop: 8 }}>
+                      <div style={{ marginTop: 8, display: "grid", gap: 8 }}>
                         <select
-                          value={mode}
-                          onChange={(e) => setDayFilter(d, e.target.value)}
+                          value={fillMode}
+                          onChange={(e) => setDayFilter(d, { fill: e.target.value })}
                           style={{
                             width: "100%",
                             padding: compact ? "5px 8px" : "6px 8px",
@@ -1696,6 +2123,28 @@ export default function Cargas() {
                           <option value="all">Todos</option>
                           <option value="filled">Preenchidos</option>
                           <option value="empty">Vazios</option>
+                        </select>
+
+                        <select
+                          value={cargaStatus}
+                          onChange={(e) => setDayFilter(d, { cargaStatus: e.target.value })}
+                          style={{
+                            width: "100%",
+                            padding: compact ? "5px 8px" : "6px 8px",
+                            borderRadius: 8,
+                            border: `1px solid ${TG.border}`,
+                            fontSize: 12,
+                            fontWeight: 800,
+                            outline: "none",
+                            background: TG.white,
+                            color: TG.text,
+                          }}
+                          title="Filtro por status da carga nesse dia"
+                        >
+                          <option value="any">Status: (todos)</option>
+                          {cargaStatusOptions.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
                         </select>
                       </div>
                     </th>
@@ -1968,6 +2417,126 @@ export default function Cargas() {
       </div>
 
       {/* =========================
+          MODAL RELATÓRIO
+      ========================== */}
+      {reportOpen && (
+        <div style={modalOverlayStyle} onMouseDown={() => setReportOpen(false)}>
+          <div style={{ ...modalCardStyle, width: "min(1100px, 100%)" }} onMouseDown={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center" }}>
+              <div>
+                <div style={{ fontWeight: 900, color: TG.black, fontSize: 18 }}>Relatório do dia</div>
+                <div style={{ fontSize: 12, color: TG.muted, fontWeight: 800 }}>
+                  {dayKPIs.dayLabel} {reportUF !== "ALL" ? `• UF: ${reportUF}` : ""} {reportCity !== "ALL" ? `• Cidade: ${reportCity}` : ""}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <button onClick={printReportNow} style={{ ...btnSmall, borderColor: TG.blue, color: TG.blueDark }} title="Abre uma página A4 para imprimir">
+                  🖨️ Imprimir
+                </button>
+                <button onClick={() => setReportOpen(false)} style={btnGhost}>✕</button>
+              </div>
+            </div>
+
+            <div style={{ marginTop: 12, padding: 12, border: `1px solid ${TG.border}`, borderRadius: 12, background: "#f9fafb" }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <div style={{ fontWeight: 900, color: TG.black }}>Filtros:</div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: TG.muted }}>UF</div>
+                  <select value={reportUF} onChange={(e) => setReportUF(e.target.value)} style={{ ...input, width: 140, fontWeight: 900 }}>
+                    <option value="ALL">Todas</option>
+                    {reportUFOptions.map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div style={{ fontSize: 12, fontWeight: 800, color: TG.muted }}>Cidade</div>
+                  <select value={reportCity} onChange={(e) => setReportCity(e.target.value)} style={{ ...input, width: 220, fontWeight: 900 }}>
+                    <option value="ALL">Todas</option>
+                    {reportCityOptions.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ marginLeft: "auto", fontSize: 12, fontWeight: 900, color: TG.blueDark }}>
+                  Total no filtro: {reportEntries.length}
+                </div>
+              </div>
+
+              <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {summarizeUFcity(reportEntries).slice(0, 10).map((x, i) => (
+                  <span
+                    key={`${x.uf}-${x.cidade}-${i}`}
+                    style={{
+                      border: `1px solid ${TG.border}`,
+                      background: TG.white,
+                      borderRadius: 999,
+                      padding: "4px 10px",
+                      fontSize: 11,
+                      fontWeight: 900,
+                      color: TG.text,
+                    }}
+                    title="UF • Cidade: quantidade"
+                  >
+                    <span style={{ color: TG.blueDark }}>{x.uf || "-"}</span> • {x.cidade || "-"}: {x.qtd}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: 900, color: TG.muted }}>
+                Dica: este relatório foi feito para caber em 1 página (limitando linhas por status). Para ver tudo, filtre por UF/Cidade.
+              </div>
+            </div>
+
+            <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
+              {[
+                "AGUARDANDO DESCARGA",
+                "AGUARDANDO CARREGAMENTO",
+                "EM ROTA PARA A ENTREGA",
+                "EM ROTA PARA A COLETA",
+                "VAZIO",
+                "MANUTENÇÃO",
+              ].map((k) => {
+                const list = reportGroups.get(k) || [];
+                if (list.length === 0) return null;
+
+                const vt = summarizeVeiculoTipo(list);
+
+                return (
+                  <div key={k}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
+                      <div style={{ fontWeight: 900, fontSize: 14, color: TG.black }}>
+                        {getSectionTitle(k)} <span style={{ color: TG.blueDark }}>({list.length})</span>
+                      </div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 12, fontWeight: 900, color: TG.muted }}>
+                        <span>TOCO: <span style={{ color: TG.black }}>{vt.TOCO}</span></span>
+                        <span>TRUCADO: <span style={{ color: TG.black }}>{vt.TRUCADO}</span></span>
+                        <span>TRUCK: <span style={{ color: TG.black }}>{vt.TRUCK}</span></span>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 10 }}>
+                      {renderReportTable(list, k)}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {reportEntries.length === 0 ? (
+                <div style={{ padding: 18, border: `1px solid ${TG.border}`, borderRadius: 12, background: TG.white, fontWeight: 900, color: TG.muted }}>
+                  Nenhuma carga encontrada para o dia/filtros selecionados.
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================
           MODAL 1: PICKER
       ========================== */}
       {pickerOpen && (
@@ -2145,7 +2714,7 @@ export default function Cargas() {
                     name="dataColeta"
                     value={formCarga.dataColeta}
                     onChange={onCargaChange}
-                    placeholder='ex: 09/02/2026 11:00'
+                    placeholder="ex: 09/02/2026 11:00"
                   />
                 </Input>
 
@@ -2154,7 +2723,7 @@ export default function Cargas() {
                     name="dataEntrega"
                     value={formCarga.dataEntrega}
                     onChange={onCargaChange}
-                    placeholder='ex: 10/02/2026 05:00'
+                    placeholder="ex: 10/02/2026 05:00"
                   />
                 </Input>
 
