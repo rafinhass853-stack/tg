@@ -39,13 +39,11 @@ const TG = {
    STATUS DA CARGA (OPERAÇÃO)
 ========================= */
 const cargaStatusOptions = [
-  "AGUARDANDO CARREGAMENTO",
-  "EM ROTA PARA A COLETA",
-  "EM ROTA PARA A ENTREGA",
   "AGUARDANDO DESCARGA",
   "VAZIO",
   "MANUTENÇÃO",
-];
+]
+;
 
 /* =========================
    STATUS DO MOTORISTA (ESCALA)
@@ -1703,6 +1701,29 @@ export default function Cargas() {
     return map;
   }
 
+  function groupByCity(list) {
+  const map = new Map();
+  for (const x of list) {
+    // chave de cidade: "CIDADE|UF"
+    const cidade = (x.cidade || "-").toUpperCase();
+    const uf = (x.uf || "-").toUpperCase();
+    const key = `${cidade}|${uf}`;
+
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(x);
+  }
+
+  // ordena por quantidade (desc), depois cidade
+  const arr = Array.from(map.entries())
+    .map(([key, items]) => {
+      const [cidade, uf] = key.split("|");
+      return { cidade, uf, items, qtd: items.length };
+    })
+    .sort((a, b) => b.qtd - a.qtd || a.cidade.localeCompare(b.cidade));
+
+  return arr;
+}
+
   const reportGroups = useMemo(() => groupByStatus(reportEntries), [reportEntries]);
 
   function summarizeUFcity(list) {
@@ -1742,83 +1763,95 @@ export default function Cargas() {
     return `Status: ${st}`;
   }
 
-  function renderReportTable(list, statusKey) {
-    const LIMIT = 14; // pra caber bem em 1 página
-    const shown = list.slice(0, LIMIT);
-    const hidden = Math.max(0, list.length - LIMIT);
+  function renderReportByCity(list, statusKey) {
+  const cities = groupByCity(list);
 
-    return (
-      <div style={{ border: `1px solid ${TG.border}`, borderRadius: 12, overflow: "hidden", background: TG.white }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-          <thead>
-            <tr style={{ background: "#f3f4f6" }}>
-              <th style={{ padding: 8, textAlign: "left", borderBottom: `1px solid ${TG.border}` }}>Motorista</th>
-              <th style={{ padding: 8, textAlign: "left", borderBottom: `1px solid ${TG.border}` }}>Frota</th>
-              <th style={{ padding: 8, textAlign: "center", borderBottom: `1px solid ${TG.border}` }}>MOPP</th>
-              <th style={{ padding: 8, textAlign: "left", borderBottom: `1px solid ${TG.border}` }}>Veículo</th>
-              <th style={{ padding: 8, textAlign: "left", borderBottom: `1px solid ${TG.border}` }}>Tipo</th>
-              <th style={{ padding: 8, textAlign: "left", borderBottom: `1px solid ${TG.border}` }}>Carreta</th>
-              <th style={{ padding: 8, textAlign: "left", borderBottom: `1px solid ${TG.border}` }}>Tipo</th>
-              <th style={{ padding: 8, textAlign: "left", borderBottom: `1px solid ${TG.border}` }}>
-                {statusKey === "VAZIO" || statusKey.includes("MANUT") ? "Cidade" : "Destino / Cliente"}
-              </th>
-              <th style={{ padding: 8, textAlign: "center", borderBottom: `1px solid ${TG.border}`, width: 70 }}>
-                Hora
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((r, i) => (
-              <tr key={r.id || i} style={{ background: i % 2 === 0 ? TG.white : "#fafafa" }}>
-                <td style={{ padding: 8, borderBottom: `1px solid ${TG.border}` }}>
-                  <div style={{ fontWeight: 800 }}>{r.motorista}</div>
-                </td>
-                <td style={{ padding: 8, borderBottom: `1px solid ${TG.border}` }}>{r.frota}</td>
-                <td style={{ padding: 8, borderBottom: `1px solid ${TG.border}`, textAlign: "center" }}>
-                  <span
-                    style={{
-                      display: "inline-block",
-                      padding: "2px 8px",
-                      borderRadius: 999,
-                      fontWeight: 900,
-                      border: `1px solid ${TG.border}`,
-                      background: r.mopp === "Sim" ? "#dcfce7" : "#fee2e2",
-                      color: r.mopp === "Sim" ? "#065f46" : "#991b1b",
-                    }}
-                  >
-                    {r.mopp}
-                  </span>
-                </td>
-                <td style={{ padding: 8, borderBottom: `1px solid ${TG.border}` }}>{r.veiculoPlaca}</td>
-                <td style={{ padding: 8, borderBottom: `1px solid ${TG.border}` }}>{r.veiculoTipo}</td>
-                <td style={{ padding: 8, borderBottom: `1px solid ${TG.border}` }}>{r.carretaPlaca}</td>
-                <td style={{ padding: 8, borderBottom: `1px solid ${TG.border}` }}>{r.carretaTipo}</td>
-                <td style={{ padding: 8, borderBottom: `1px solid ${TG.border}` }}>
-                  {statusKey === "VAZIO" || statusKey.includes("MANUT") ? (
-                    <div><b>{r.uf || "-"}</b> • {r.origem}</div>
-                  ) : (
-                    <div>
-                      <div style={{ fontWeight: 800 }}>{r.clienteDestino}</div>
-                      <div style={{ color: TG.muted }}>{r.destino}</div>
-                    </div>
-                  )}
-                </td>
-                <td style={{ padding: 8, borderBottom: `1px solid ${TG.border}`, textAlign: "center", fontWeight: 900 }}>
-                  {r.hora || "-"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {hidden > 0 ? (
-          <div style={{ padding: 10, fontSize: 11, fontWeight: 800, color: TG.muted, background: "#fff7ed" }}>
-            +{hidden} linha(s) não exibida(s) para caber em uma página. (Se precisar, filtre por UF/Cidade e gere novamente.)
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      {cities.map((g) => (
+        <div
+          key={`${g.uf}-${g.cidade}`}
+          style={{
+            border: `1px solid ${TG.border}`,
+            borderRadius: 12,
+            overflow: "hidden",
+            background: TG.white,
+          }}
+        >
+          {/* Cabeçalho da cidade */}
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 10,
+              alignItems: "center",
+              padding: "10px 12px",
+              background: "#f3f4f6",
+              borderBottom: `1px solid ${TG.border}`,
+            }}
+          >
+            <div style={{ fontWeight: 900, fontSize: 13, color: TG.black }}>
+              {g.cidade} <span style={{ color: TG.blueDark }}>• {g.uf}</span>
+            </div>
+            <div
+              style={{
+                fontWeight: 900,
+                fontSize: 12,
+                padding: "4px 10px",
+                borderRadius: 999,
+                border: `1px solid ${TG.border}`,
+                background: TG.white,
+              }}
+            >
+              {g.qtd}
+            </div>
           </div>
-        ) : null}
-      </div>
-    );
-  }
+
+          {/* Lista de veículos (simples e direta pra print) */}
+          <div style={{ padding: 10, display: "grid", gap: 8 }}>
+            {g.items.map((r) => (
+              <div
+                key={r.id}
+                style={{
+                  border: `1px solid ${TG.border}`,
+                  borderRadius: 10,
+                  padding: 10,
+                  background: "#fafafa",
+                  display: "grid",
+                  gridTemplateColumns: "1.2fr 1fr 1fr 1fr",
+                  gap: 10,
+                  alignItems: "center",
+                }}
+              >
+                <div>
+                  <div style={{ fontWeight: 900, fontSize: 12 }}>{r.motorista}</div>
+                  <div style={{ fontSize: 11, fontWeight: 800, color: TG.muted }}>{r.frota}</div>
+                </div>
+
+                <div style={{ fontSize: 11, fontWeight: 900 }}>
+                  🚛 {r.veiculoPlaca} <span style={{ color: TG.muted }}>({r.veiculoTipo})</span>
+                </div>
+
+                <div style={{ fontSize: 11, fontWeight: 900 }}>
+                  🚚 {r.carretaPlaca} <span style={{ color: TG.muted }}>({r.carretaTipo})</span>
+                </div>
+
+                <div style={{ textAlign: "right", fontSize: 11, fontWeight: 900 }}>
+                  {statusKey === "AGUARDANDO DESCARGA" ? (
+                    <span style={{ color: TG.black }}>⏱ {r.hora || "-"}</span>
+                  ) : (
+                    <span style={{ color: TG.muted }}>⏱ {r.hora || "-"}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 
   function printReportNow() {
     const title = `Relatório do dia - ${dayKPIs.dayLabel || ""}`;
@@ -2520,7 +2553,7 @@ export default function Cargas() {
                     </div>
 
                     <div style={{ marginTop: 10 }}>
-                      {renderReportTable(list, k)}
+                      {renderReportByCity(list, k)}
                     </div>
                   </div>
                 );
